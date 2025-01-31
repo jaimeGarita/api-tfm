@@ -9,8 +9,8 @@ phases:
     commands:
       - echo "Building Docker image..."
       - docker build -t simple-docker-service .
-      - docker tag simple-docker-service:latest 195275638124.dkr.ecr.us-west-2.amazonaws.com/simple-docker-service:latest
+      - docker tag simple-docker-service:latest ${aws_ecr_repository.simple_docker_service.repository_url}:latest
   post_build:
     commands:
       - echo "Pushing Docker image to ECR..."
-      - docker push 195275638124.dkr.ecr.us-west-2.amazonaws.com/simple-docker-service:latest
+      - docker push ${aws_ecr_repository.simple_docker_service.repository_url}:latest
