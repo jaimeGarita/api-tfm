@@ -4,13 +4,13 @@ phases:
   pre_build:
     commands:
       - echo "Logging in to Amazon ECR..."
-      - aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin 195275638124.dkr.ecr.us-west-2.amazonaws.com
+      - aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin $REPOSITORY_URI
   build:
     commands:
       - echo "Building Docker image..."
       - docker build -t simple-docker-service .
-      - docker tag simple-docker-service:latest ${aws_ecr_repository.simple_docker_service.repository_url}:latest
+      - docker tag simple-docker-service:latest $REPOSITORY_URI:latest
   post_build:
     commands:
       - echo "Pushing Docker image to ECR..."
-      - docker push ${aws_ecr_repository.simple_docker_service.repository_url}:latest
+      - docker push $REPOSITORY_URI:latest
