@@ -10,7 +10,13 @@ phases:
       - echo "Building Docker image..."
       - docker build -t simple-docker-service .
       - docker tag simple-docker-service:latest $REPOSITORY_URI:latest
-  post_build:
+post_build:
     commands:
       - echo "Pushing Docker image to ECR..."
       - docker push $REPOSITORY_URI:latest
+      - echo "Triggering EC2 update..."
+      - aws ssm send-command \
+          --document-name "AWS-RunShellScript" \
+          --targets "Key=tag:Environment,Values=production" \
+          --parameters 'commands=["docker pull '$REPOSITORY_URI':latest", "docker stop simple-docker-service || true", "docker rm simple-docker-service || true", "docker run -d --name simple-docker-service -p 80:80 '$REPOSITORY_URI':latest"]' \
+          --region us-west-2
