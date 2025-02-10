@@ -1,1 +1,6 @@
 Flask==3.1.0
+pandas
+typing
+bs4
+requests
+waitress
