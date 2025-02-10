@@ -6,7 +6,7 @@ app = Flask(__name__)
 # Define una ruta para la página principal
 @app.route('/')
 def hello():
-    return '¡Hola, mundo desde Flask! V2'
+    return '¡Hola, mundo desde Flask! Prueba 2'
 
 # Nueva ruta para probar el pipeline
 @app.route('/test')
