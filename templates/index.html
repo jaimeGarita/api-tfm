@@ -1,65 +1,900 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Procesador de Datos y Web Scraping</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>Wiki Explorer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        .container { margin-top: 30px; }
-        .table { margin-top: 20px; }
+        :root {
+            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --secondary-gradient: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
+            --danger-gradient: linear-gradient(135deg, #e53e3e 0%, #c53030 100%);
+            --card-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            --hover-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
+            --border-radius: 15px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Poppins', sans-serif;
+        }
+
+        body {
+            background: #f0f2f5;
+            color: #1a1a1a;
+            line-height: 1.6;
+        }
+
+        .header {
+            background: var(--primary-gradient);
+            color: white;
+            padding: 3rem 2rem;
+            text-align: center;
+            box-shadow: var(--card-shadow);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 320"><path fill="rgba(255,255,255,0.1)" fill-opacity="1" d="M0,96L48,112C96,128,192,160,288,186.7C384,213,480,235,576,213.3C672,192,768,128,864,128C960,128,1056,192,1152,208C1248,224,1344,192,1392,176L1440,160L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"></path></svg>');
+            background-size: cover;
+            opacity: 0.1;
+            z-index: 0;
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            font-weight: 600;
+            position: relative;
+            z-index: 1;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            position: relative;
+            z-index: 1;
+        }
+
+        .search-form {
+            text-align: center;
+            margin: 2rem 0;
+            padding: 0 1rem;
+        }
+
+        .options-form {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            max-width: 500px;
+            margin: 0 auto;
+            background: white;
+            padding: 2rem;
+            border-radius: var(--border-radius);
+            box-shadow: var(--card-shadow);
+            transform: translateY(-30px);
+            animation: slideUp 0.5s ease-out forwards;
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(30px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .input-group {
+            position: relative;
+            background: white;
+            border-radius: var(--border-radius);
+            padding: 0.5rem;
+        }
+
+        .input-group label {
+            position: absolute;
+            top: -0.5rem;
+            left: 1rem;
+            background: white;
+            padding: 0 0.5rem;
+            color: #667eea;
+            font-size: 0.8rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        input[type="number"] {
+            width: 100%;
+            padding: 1rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 1rem;
+            outline: none;
+            transition: all 0.3s ease;
+            background: #f8fafc;
+        }
+
+        input[type="number"]:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            background: white;
+        }
+
+        .historic-options {
+            display: flex;
+            gap: 1.5rem;
+            justify-content: center;
+            margin-top: 2rem;
+            padding: 1rem;
+            background: white;
+            border-radius: var(--border-radius);
+            box-shadow: var(--card-shadow);
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .historic-option {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            padding: 1.5rem;
+            border-radius: 12px;
+            background: #f8fafc;
+            transition: all 0.3s ease;
+        }
+
+        .historic-option:hover {
+            background: #f1f5f9;
+            transform: translateY(-2px);
+        }
+
+        .historic-option-title {
+            font-size: 1rem;
+            font-weight: 500;
+            color: #4a5568;
+            text-align: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .historic-option .input-group {
+            margin: 0;
+        }
+
+        .historic-option .action-button {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .action-button {
+            background: var(--primary-gradient);
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 50px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: var(--card-shadow);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .action-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(rgba(255,255,255,0.1), rgba(255,255,255,0));
+            transform: translateY(-100%);
+            transition: transform 0.3s ease;
+        }
+
+        .action-button:hover::before {
+            transform: translateY(0);
+        }
+
+        .action-button:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--hover-shadow);
+        }
+
+        .action-button.secondary {
+            background: var(--secondary-gradient);
+        }
+
+        .action-button.danger {
+            background: var(--danger-gradient);
+        }
+
+        .action-button i {
+            font-size: 1.2rem;
+            transition: transform 0.3s ease;
+        }
+
+        .action-button:hover i {
+            transform: scale(1.1);
+        }
+
+        .error-message {
+            background: #fff5f5;
+            color: #c53030;
+            padding: 1rem;
+            border-radius: var(--border-radius);
+            margin: 1rem auto;
+            max-width: 500px;
+            text-align: center;
+            box-shadow: var(--card-shadow);
+            animation: shake 0.5s ease-in-out;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        .links-container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+
+        .results-header {
+            text-align: center;
+            margin-bottom: 2rem;
+            color: #4a5568;
+        }
+
+        .link-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.5rem;
+            padding: 1rem;
+        }
+
+        .link-item {
+            background: white;
+            border-radius: var(--border-radius);
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+            box-shadow: var(--card-shadow);
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .link-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: var(--primary-gradient);
+            transform: scaleX(0);
+            transition: transform 0.3s ease;
+        }
+
+        .link-item:hover::before {
+            transform: scaleX(1);
+        }
+
+        .link-item:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--hover-shadow);
+        }
+
+        .link-item h3 {
+            color: #2d3748;
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+            min-height: 3em;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .link-item a {
+            color: #4a5568;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .link-item a:hover {
+            color: #667eea;
+        }
+
+        .resumen {
+            color: #718096;
+            font-size: 0.9rem;
+            margin: 1rem 0;
+            line-height: 1.5;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            max-height: 4.5em;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            margin-top: auto;
+            padding-top: 1rem;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #4a5568;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: #a0aec0;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .link-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .historic-options {
+                flex-direction: column;
+                gap: 1rem;
+            }
+        }
+
+        /* Animaciones para los elementos cuando aparecen */
+        .link-item {
+            opacity: 0;
+            animation: fadeIn 0.5s ease-out forwards;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Aplicar delay a cada tarjeta */
+        {% for i in range(100) %}
+        .link-item:nth-child({{ i }}) {
+            animation-delay: {{ i * 0.05 }}s;
+        }
+        {% endfor %}
+
+
+        /* Estilos para el modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            overflow-y: auto;
+        }
+
+        .modal-content {
+            background: white;
+            margin: 5% auto;
+            padding: 2rem;
+            width: 90%;
+            max-width: 800px;
+            border-radius: 15px;
+            position: relative;
+            animation: modalSlideIn 0.3s ease-out;
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                transform: translateY(-100px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .close-modal {
+            position: absolute;
+            right: 1.5rem;
+            top: 1rem;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #666;
+            transition: color 0.2s;
+        }
+
+        .close-modal:hover {
+            color: #000;
+        }
+
+        .modal-header {
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .modal-body {
+            line-height: 1.6;
+        }
+
+        .tag-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin: 1rem 0;
+        }
+
+        .modal-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin: 1.5rem 0;
+            padding: 1rem;
+            background: #f7fafc;
+            border-radius: 10px;
+        }
+
+        /* Estilos para la sección histórica */
+        .historic-section {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 2rem;
+            background: white;
+            border-radius: var(--border-radius);
+            box-shadow: var(--card-shadow);
+            animation: slideUp 0.5s ease-out;
+        }
+
+        .historic-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .historic-title {
+            font-size: 1.8rem;
+            color: #2d3748;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .historic-title i {
+            color: #667eea;
+        }
+
+        .historic-filters {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .filter-button {
+            padding: 0.5rem 1rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 20px;
+            background: white;
+            color: #4a5568;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+        }
+
+        .filter-button:hover,
+        .filter-button.active {
+            background: var(--primary-gradient);
+            color: white;
+            border-color: transparent;
+        }
+
+        .historic-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .historic-card {
+            background: white;
+            border-radius: var(--border-radius);
+            padding: 1.5rem;
+            box-shadow: var(--card-shadow);
+            transition: all 0.3s ease;
+            border: 1px solid #e2e8f0;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .historic-card::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 0;
+            height: 0;
+            border-style: solid;
+            border-width: 0 50px 50px 0;
+            border-color: transparent #f7fafc transparent transparent;
+            transition: all 0.3s ease;
+        }
+
+        .historic-card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--hover-shadow);
+        }
+
+        .historic-card:hover::after {
+            border-color: transparent #667eea transparent transparent;
+        }
+
+        .historic-date {
+            font-size: 0.8rem;
+            color: #a0aec0;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .historic-stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .historic-stat {
+            text-align: center;
+            padding: 0.5rem;
+            background: #f7fafc;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .historic-stat:hover {
+            background: var(--primary-gradient);
+            color: white;
+        }
+
+        .historic-stat-value {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .historic-stat-label {
+            font-size: 0.8rem;
+            opacity: 0.8;
+        }
+
+        .historic-empty {
+            text-align: center;
+            padding: 3rem;
+            color: #a0aec0;
+        }
+
+        .historic-empty i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-top: 2rem;
+        }
+
+        .page-button {
+            padding: 0.5rem 1rem;
+            border: none;
+            background: white;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: var(--card-shadow);
+        }
+
+        .page-button:hover,
+        .page-button.active {
+            background: var(--primary-gradient);
+            color: white;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .historic-card:hover .historic-stat {
+            animation: pulse 1s infinite;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Procesador de Datos y Web Scraping</h1>
-        
-        <div class="row mt-4">
-            <div class="col-md-6">
-                <h3>Subir archivo CSV</h3>
-                <form method="post" enctype="multipart/form-data">
-                    <div class="mb-3">
-                        <input type="file" class="form-control" name="file">
-                    </div>
-                    <button type="submit" class="btn btn-primary">Procesar archivo</button>
-                </form>
-            </div>
+    <div class="header">
+        <h1>Wiki Explorer</h1>
+        <p>Descubre el conocimiento conectado de Wikipedia</p>
+    </div>
+    
+    <div class="search-form">
+        {% if show_form %}
+            <form method="POST" class="options-form">
+                <input type="hidden" name="action" value="scrape">
+                <div class="input-group">
+                    <label>Número de enlaces a explorar</label>
+                    <input type="number" name="num_links" min="1" max="500" value="100" 
+                           placeholder="Ej: 100">
+                </div>
+                <button type="submit" class="action-button primary">
+                    <i class="fas fa-search"></i>
+                    Explorar Wikipedia
+                </button>
+            </form>
             
-            <div class="col-md-6">
-                <h3>Web Scraping El País</h3>
-                <form method="post">
-                    <button type="submit" name="scrape" value="true" class="btn btn-success">
-                        Obtener noticias de El País
-                    </button>
-                </form>
-                {% if hay_datos %}
-                <a href="{{ url_for('descargar_csv') }}" class="btn btn-info mt-3">
-                    Descargar datos como CSV
-                </a>
-                {% endif %}
+            <div class="historic-options">
+                <div class="historic-option">
+                    <div class="historic-option-title">
+                        <i class="fas fa-history"></i>
+                        Histórico Completo
+                    </div>
+                    <form method="POST">
+                        <input type="hidden" name="action" value="historic">
+                        <button type="submit" class="action-button secondary">
+                            Ver Todo el Histórico
+                        </button>
+                    </form>
+                </div>
+                
+                <div class="historic-option">
+                    <div class="historic-option-title">
+                        <i class="fas fa-clock"></i>
+                        Búsquedas Recientes
+                    </div>
+                    <form method="POST">
+                        <input type="hidden" name="action" value="recent">
+                        <div class="input-group">
+                            <label>Cantidad a mostrar</label>
+                            <input type="number" name="limit" min="1" max="500" value="100" 
+                                   placeholder="Ej: 100">
+                        </div>
+                        <button type="submit" class="action-button secondary">
+                            Ver Recientes
+                        </button>
+                    </form>
+                </div>
             </div>
-        </div>
-
-        {% if estadisticas %}
-        <div class="mt-4">
-            <h2>Resultados del procesamiento</h2>
-            <div class="alert alert-info">
-                <h4>Estadísticas:</h4>
-                <ul>
-                    {% for key, value in estadisticas.items() %}
-                    {% if key != 'df_limpio' %}
-                    <li><strong>{{ key }}:</strong> {{ value }}</li>
-                    {% endif %}
-                    {% endfor %}
-                </ul>
-            </div>
-        </div>
+        {% else %}
+            <form method="POST" action="/reset">
+                <button type="submit" style="background: #e53e3e;">Nueva Búsqueda</button>
+            </form>
         {% endif %}
+    </div>
 
-        {% if tabla %}
-        <div class="mt-4">
-            <h2>Datos procesados</h2>
-            {{ tabla | safe }}
+    {% if error %}
+    <div class="error-message">
+        {{ error }}
+    </div>
+    {% endif %}
+
+    {% if links %}
+    <div class="links-container">
+        <div class="results-header">
+            <h2>Artículos Descubiertos ({{ links|length }})</h2>
+        </div>
+        <div class="link-grid">
+            {% for link in links %}
+            <div class="link-item">
+                <h3><a href="{{ link.url }}" target="_blank">{{ link.titulo }}</a></h3>
+                <div class="resumen">{{ link.resumen[:150] }}...</div>
+                <div class="stats">
+                    <div class="stat-item">
+                        <div class="stat-value">{{ link.longitud }}</div>
+                        <div class="stat-label">Caracteres</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">{{ link.num_referencias }}</div>
+                        <div class="stat-label">Referencias</div>
+                    </div>
+                </div>
+                <div class="metadata">
+                    <p>📅 {{ link.ultima_modificacion }}</p>
+                    <!-- Categorías ocultas para usar en el modal -->
+                    <div class="hidden-categories" style="display: none;">{{ link.categorias }}</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Modal con diseño mejorado -->
+    <div id="articleModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <div class="modal-header">
+                <h2 id="modalTitle"></h2>
+            </div>
+            <div class="modal-body">
+                <p id="modalResumen"></p>
+                <div class="modal-stats">
+                    <div class="stat-item">
+                        <div class="stat-value" id="modalCaracteres"></div>
+                        <div class="stat-label">Caracteres</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="modalReferencias"></div>
+                        <div class="stat-label">Referencias</div>
+                    </div>
+                </div>
+                <p><strong>Última modificación:</strong> <span id="modalFecha"></span></p>
+                <div class="categories-section">
+                    <h3>Categorías</h3>
+                    <div class="tag-container" id="modalCategorias"></div>
+                </div>
+                <p><a id="modalLink" target="_blank" class="button">Ver artículo completo</a></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sección del histórico -->
+    <div class="historic-section">
+        <div class="historic-header">
+            <h2 class="historic-title">
+                <i class="fas fa-history"></i>
+                Histórico de Búsquedas
+            </h2>
+            <div class="historic-filters">
+                <button class="filter-button active">Todos</button>
+                <button class="filter-button">Última semana</button>
+                <button class="filter-button">Último mes</button>
+            </div>
+        </div>
+
+        {% if links %}
+        <div class="historic-grid">
+            {% for link in links %}
+            <div class="historic-card">
+                <div class="historic-date">
+                    <i class="far fa-calendar-alt"></i>
+                    {{ link.fecha_scraping }}
+                </div>
+                <h3>{{ link.titulo }}</h3>
+                <div class="resumen">{{ link.resumen[:150] }}...</div>
+                <div class="historic-stats">
+                    <div class="historic-stat">
+                        <div class="historic-stat-value">{{ link.longitud }}</div>
+                        <div class="historic-stat-label">Caracteres</div>
+                    </div>
+                    <div class="historic-stat">
+                        <div class="historic-stat-value">{{ link.num_referencias }}</div>
+                        <div class="historic-stat-label">Referencias</div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="pagination">
+            <button class="page-button active">1</button>
+            <button class="page-button">2</button>
+            <button class="page-button">3</button>
+            <button class="page-button">...</button>
+            <button class="page-button">10</button>
+        </div>
+        {% else %}
+        <div class="historic-empty">
+            <i class="far fa-folder-open"></i>
+            <p>No hay búsquedas en el histórico</p>
         </div>
         {% endif %}
     </div>
+
+    <script>
+        // Funcionalidad del modal
+        const modal = document.getElementById('articleModal');
+        const closeBtn = document.getElementsByClassName('close-modal')[0];
+
+        // Cerrar modal con el botón X
+        closeBtn.onclick = function() {
+            modal.style.display = "none";
+        }
+
+        // Cerrar modal haciendo clic fuera
+        window.onclick = function(event) {
+            if (event.target == modal) {
+                modal.style.display = "none";
+            }
+        }
+
+        // Función para abrir el modal con los datos del artículo
+        function openModal(data) {
+            document.getElementById('modalTitle').textContent = data.titulo;
+            document.getElementById('modalResumen').textContent = data.resumen;
+            document.getElementById('modalCaracteres').textContent = data.longitud;
+            document.getElementById('modalReferencias').textContent = data.num_referencias;
+            document.getElementById('modalFecha').textContent = data.ultima_modificacion;
+            document.getElementById('modalLink').href = data.url;
+
+            // Limpiar y añadir categorías
+            const categoriasContainer = document.getElementById('modalCategorias');
+            categoriasContainer.innerHTML = '';
+            data.categorias.split('|').forEach(categoria => {
+                if (categoria) {
+                    const tag = document.createElement('span');
+                    tag.className = 'tag';
+                    tag.textContent = categoria;
+                    categoriasContainer.appendChild(tag);
+                }
+            });
+
+            modal.style.display = "block";
+        }
+
+        // Añadir evento click a cada tarjeta
+        document.querySelectorAll('.link-item').forEach(item => {
+            item.onclick = function() {
+                const data = {
+                    titulo: this.querySelector('h3 a').textContent,
+                    resumen: this.querySelector('.resumen').textContent,
+                    longitud: this.querySelector('.stat-value').textContent,
+                    num_referencias: this.querySelectorAll('.stat-value')[1].textContent,
+                    ultima_modificacion: this.querySelector('.metadata p').textContent,
+                    categorias: this.querySelector('.hidden-categories').textContent,
+                    url: this.querySelector('h3 a').href
+                };
+                openModal(data);
+            };
+        });
+    </script>
 </body>
 </html> 

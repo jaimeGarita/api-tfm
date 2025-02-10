@@ -1,212 +1,223 @@
-from flask import Flask, render_template, request, redirect, url_for, send_file
-import pandas as pd
-from data_processing import clean_dataframe
+from flask import Flask, render_template, request, session
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime
-import io
+import pandas as pd
 from waitress import serve
+import random
+from datetime import datetime
+import psycopg2
+from psycopg2.extras import RealDictCursor
+import os
 
-# Crea una instancia de Flask
 app = Flask(__name__)
+app.secret_key = 'tu_clave_secreta_aqui'  # Necesario para usar sesiones
 
-def get_category(articulo, soup):
-    """
-    Extrae la categoría del artículo analizando diferentes elementos del DOM
-    """
-    # Primero intentamos obtener la categoría desde el div de la sección
-    categoria_div = articulo.find('div', class_='a_k')
-    if categoria_div:
-        categoria_link = categoria_div.find('a', class_='a_k_n')
-        if categoria_link:
-            return categoria_link.text.strip()
-    
-    # Si no encontramos la categoría en el div, buscamos en las etiquetas de navegación
-    try:
-        # Buscar la URL del artículo
-        articulo_url = articulo.find('a')['href']
-        if articulo_url:
-            # Extraer la sección de la URL
-            partes_url = articulo_url.split('/')
-            if len(partes_url) > 3:
-                seccion = partes_url[3]  # Ejemplo: internacional, economia, deportes, etc.
-                
-                # Mapeo de secciones principales
-                secciones = {
-                    'internacional': 'Internacional',
-                    'economia': 'Economía',
-                    'deportes': 'Deportes',
-                    'sociedad': 'Sociedad',
-                    'cultura': 'Cultura',
-                    'tecnologia': 'Tecnología',
-                    'gente': 'Gente',
-                    'television': 'Televisión',
-                    'espana': 'España',
-                    'opinion': 'Opinión',
-                    'america': 'América',
-                    'mexico': 'México',
-                    'us': 'Estados Unidos'
-                }
-                
-                return secciones.get(seccion, seccion.capitalize())
-    except:
-        pass
-    
-    return 'No disponible'
+# Configuración de la conexión RDS (solo se usará cuando sea necesario)
+DB_CONFIG = {
+    'dbname': os.environ.get('DB_NAME', 'wikipedia'),
+    'user': os.environ.get('DB_USER', 'tu_usuario'),
+    'password': os.environ.get('DB_PASSWORD', 'tu_password'),
+    'host': os.environ.get('DB_HOST', 'tu_endpoint_rds'),
+    'port': os.environ.get('DB_PORT', '5432')
+}
 
-def get_date(articulo):
-    """
-    Extrae la fecha del artículo desde el elemento sc_date
-    """
+def get_db_connection():
+    return psycopg2.connect(**DB_CONFIG)
+
+def init_db():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute('''CREATE TABLE IF NOT EXISTS articulos
+                   (id SERIAL PRIMARY KEY,
+                    titulo TEXT,
+                    url TEXT,
+                    resumen TEXT,
+                    longitud INTEGER,
+                    num_referencias INTEGER,
+                    categorias TEXT,
+                    ultima_modificacion TEXT,
+                    fecha_scraping TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+    conn.commit()
+    cur.close()
+    conn.close()
+
+def save_to_db(links):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    for link in links:
+        cur.execute('''INSERT INTO articulos 
+                      (titulo, url, resumen, longitud, num_referencias, 
+                       categorias, ultima_modificacion)
+                      VALUES (%s, %s, %s, %s, %s, %s, %s)''',
+                   (link['titulo'], link['url'], link['resumen'],
+                    link['longitud'], link['num_referencias'],
+                    link['categorias'], link['ultima_modificacion']))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+def get_historic_links(limit=None):
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    if limit:
+        cur.execute('SELECT * FROM articulos ORDER BY fecha_scraping DESC LIMIT %s', (limit,))
+    else:
+        cur.execute('SELECT * FROM articulos ORDER BY fecha_scraping DESC')
+    links = cur.fetchall()
+    cur.close()
+    conn.close()
+    return links
+
+def get_article_info(url, headers):
+    """Obtiene información detallada de un artículo"""
     try:
-        # Buscar específicamente el enlace con id="sc_date"
-        fecha_elemento = articulo.find('a', id='a_md_f')
-        if fecha_elemento:
-            # Obtener la fecha del atributo data-date
-            fecha_completa = fecha_elemento.get('data-date')
-            if fecha_completa:
-                return fecha_completa
-            
-            # Si no hay data-date, obtener el texto
-            fecha_texto = fecha_elemento.text.strip()
-            if fecha_texto:
-                return fecha_texto
+        response = requests.get(url, headers=headers)
+        soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Búsqueda alternativa si no se encuentra el sc_date
-        time_elemento = articulo.find('time')
-        if time_elemento:
-            return time_elemento.get('datetime', 'No disponible')
-            
+        # Obtener el primer párrafo (resumen)
+        first_p = soup.find('div', class_='mw-parser-output').find('p', class_=False)
+        resumen = first_p.text.strip() if first_p else 'No disponible'
+        
+        # Obtener longitud del artículo
+        content = soup.find(id='mw-content-text')
+        longitud = len(content.text) if content else 0
+        
+        # Obtener fecha de última modificación
+        ultima_mod = 'No disponible'
+        footer = soup.find('li', id='footer-info-lastmod')
+        if footer:
+            ultima_mod = footer.text.replace('Esta página se editó por última vez el ', '').strip()
+        
+        # Obtener categorías
+        categorias = []
+        cat_links = soup.find_all('div', class_='mw-normal-catlinks')
+        for cat in cat_links:
+            cats = cat.find_all('a')
+            categorias.extend([c.text for c in cats[1:]])  # Ignorar el primer enlace que es "Categorías"
+        
+        # Obtener referencias
+        referencias = len(soup.find_all('cite')) if soup.find_all('cite') else 0
+        
+        return {
+            'resumen': resumen,
+            'longitud': longitud,
+            'ultima_modificacion': ultima_mod,
+            'categorias': '|'.join(categorias),
+            'num_referencias': referencias
+        }
     except Exception as e:
-        pass
-    
-    return 'No disponible'
+        print(f"Error obteniendo detalles de {url}: {str(e)}")
+        return {
+            'resumen': 'Error',
+            'longitud': 0,
+            'ultima_modificacion': 'Error',
+            'categorias': 'Error',
+            'num_referencias': 0
+        }
 
-def scrape_elpais():
-    # URL del sitio web
-    url = 'https://elpais.com'
+def get_wiki_links(url='https://es.wikipedia.org/wiki/Wikipedia:Portada', num_links=10):
+    # Headers para evitar bloqueos
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    }
     
-    # Realizar la petición HTTP
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-    response = requests.get(url, headers=headers)
+    links = []
+    visited = set()
+    to_visit = {url}
     
-    # Crear objeto BeautifulSoup
-    soup = BeautifulSoup(response.text, 'html.parser')
-    
-    # Lista para almacenar los datos
-    noticias = []
-    
-    # Encontrar todos los artículos
-    articulos = soup.find_all('article')
-    
-    for articulo in articulos:
-        titulo_elemento = articulo.find('h2')
-        if titulo_elemento:
-            titulo = titulo_elemento.text.strip()
+    while len(links) < num_links and to_visit:
+        try:
+            current_url = to_visit.pop()
+            if current_url in visited:
+                continue
+                
+            response = requests.get(current_url, headers=headers)
+            soup = BeautifulSoup(response.text, 'html.parser')
             
-            # Obtener enlace
-            enlace_elemento = articulo.find('a')
-            enlace = enlace_elemento.get('href') if enlace_elemento else 'No disponible'
-            if enlace and not enlace.startswith('http'):
-                enlace = 'https://elpais.com' + enlace
+            content = soup.find(id='mw-content-text')
+            if content:
+                for a in content.find_all('a', href=True):
+                    href = a['href']
+                    if href.startswith('/wiki/') and ':' not in href and '#' not in href:
+                        full_url = 'https://es.wikipedia.org' + href
+                        if full_url not in visited and full_url not in to_visit:
+                            article_info = get_article_info(full_url, headers)
+                            
+                            # Añadir fecha y hora actual de la búsqueda
+                            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                            
+                            links.append({
+                                'titulo': a.text.strip(),
+                                'url': full_url,
+                                'resumen': article_info['resumen'],
+                                'longitud': article_info['longitud'],
+                                'ultima_modificacion': article_info['ultima_modificacion'],
+                                'categorias': article_info['categorias'],
+                                'num_referencias': article_info['num_referencias'],
+                                'fecha_scraping': current_time
+                            })
+                            to_visit.add(full_url)
+                            print(f"Procesado: {len(links)}/{num_links}")
+                            
+                            if len(links) >= num_links:
+                                break
             
-            # Obtener categoría del enlace
-            categoria = 'No disponible'
-            if enlace and 'elpais.com/' in enlace:
-                partes_url = enlace.split('/')
-                if len(partes_url) > 3:
-                    # La categoría suele estar después del dominio
-                    categoria = partes_url[3].replace('-', ' ').title()
+            visited.add(current_url)
             
-            # Obtener resumen
-            resumen_elemento = articulo.find('p', class_='c_d')
-            if not resumen_elemento:
-                resumen_elemento = articulo.find('h2', class_='a_st')
-                print(resumen_elemento)
-            resumen = resumen_elemento.text.strip() if resumen_elemento else 'No disponible'
-            
-            # Obtener autor
-            autores = []
-            autor_links = articulo.find_all('a', class_='c_a_a')
-            if autor_links:
-                autores = [autor.text.strip() for autor in autor_links]
-                autor = ', '.join(autores)
-            else:
-                autor = 'No disponible'
-            
-            noticias.append({
-                'categoria': categoria,
-                'titulo': titulo,
-                'resumen': resumen,
-                'autor': autor,
-                'enlace': enlace
-            })
+        except Exception as e:
+            print(f"Error procesando {current_url}: {str(e)}")
+            continue
     
-    # Crear DataFrame
-    df = pd.DataFrame(noticias)
-    
-    # Guardar en CSV con timestamp
-    fecha_actual = datetime.now().strftime('%Y%m%d_%H%M')
-    nombre_archivo = f'noticias_elpais_{fecha_actual}.csv'
-    df.to_csv(nombre_archivo, index=False, encoding='utf-8')
-    
-    print(f'Se han guardado {len(noticias)} noticias en {nombre_archivo}')
-    return df
+    # Guardar en CSV solo si es una nueva búsqueda
+    df = pd.DataFrame(links)
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    filename = f'wikipedia_links_{timestamp}.csv'
+    df.to_csv(filename, index=False, encoding='utf-8')
+    print(f'Enlaces guardados en {filename}')
+            
+    return links[:num_links]
 
-# Define una ruta para la página principal
 @app.route('/', methods=['GET', 'POST'])
-def hello():
+def home():
     if request.method == 'POST':
-        if 'scrape' in request.form:
-            # Si se presiona el botón de scraping
-            try:
-                df = scrape_elpais()
-                resultado_limpieza = clean_dataframe(df)
-                
-                # Generar archivo CSV para descarga
-                output = io.StringIO()
-                df.to_csv(output, index=False)
-                output.seek(0)
-                
-                return render_template('index.html',
-                                     estadisticas=resultado_limpieza,
-                                     tabla=df.to_html(classes='table table-striped'),
-                                     hay_datos=True)
-            
-            except Exception as e:
-                return f'Error durante el scraping: {str(e)}'
+        action = request.form.get('action')
         
-        elif 'file' in request.files:
-            file = request.files['file']
-            if file.filename == '':
-                return 'No se seleccionó ningún archivo'
-            
-            if file and file.filename.endswith('.csv'):
-                df = pd.read_csv(file)
-                resultado_limpieza = clean_dataframe(df)
-                return render_template('index.html',
-                                     estadisticas=resultado_limpieza,
-                                     tabla=df.to_html(classes='table table-striped'),
-                                     hay_datos=True)
+        if action == 'scrape':
+            try:
+                num_links = int(request.form.get('num_links', 100))
+                links = get_wiki_links(num_links=num_links)
+                session['links'] = links
+                session['last_search'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                return render_template('index.html', 
+                                    links=links, 
+                                    show_form=True,
+                                    search_time=session.get('last_search'))
+            except Exception as e:
+                return render_template('index.html', error=str(e), show_form=True)
+        
+        elif action == 'historic' or action == 'recent':
+            links = session.get('links', [])
+            if links:
+                if action == 'recent' and request.form.get('limit'):
+                    limit = int(request.form.get('limit', 100))
+                    links = sorted(links, key=lambda x: x['fecha_scraping'], reverse=True)[:limit]
+                return render_template('index.html', 
+                                    links=links, 
+                                    show_historic=True,
+                                    search_time=session.get('last_search'))
             else:
-                return 'Por favor, sube un archivo CSV'
+                return render_template('index.html', 
+                                    error="No hay búsquedas recientes en la sesión actual.", 
+                                    show_form=True)
     
-    return render_template('index.html', hay_datos=False)
+    return render_template('index.html', show_form=True)
 
-@app.route('/descargar-csv')
-def descargar_csv():
-    df = scrape_elpais()
-    output = io.StringIO()
-    df.to_csv(output, index=False)
-    output.seek(0)
-    
-    return send_file(
-        io.BytesIO(output.getvalue().encode('utf-8')),
-        mimetype='text/csv',
-        as_attachment=True,
-        download_name=f'noticias_elpais_{datetime.now().strftime("%Y%m%d_%H%M")}.csv'
-    )
+@app.route('/reset', methods=['POST'])
+def reset():
+    """Endpoint para reiniciar la búsqueda"""
+    session.pop('links', None)
+    session.pop('last_search', None)
+    return render_template('index.html', show_form=True)
 
-# Inicia el servidor web
 if __name__ == '__main__':
     app.run(debug=True, host="0.0.0.0", port=5000)

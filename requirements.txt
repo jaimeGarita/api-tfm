@@ -4,3 +4,5 @@ typing
 bs4
 requests
 waitress
+psycopg2
+psycopg2-binary
