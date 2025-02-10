@@ -6,7 +6,11 @@ app = Flask(__name__)
 # Define una ruta para la página principal
 @app.route('/')
 def hello():
+<<<<<<< HEAD
     return '¡Hola, mundo desde Flask!'
+=======
+    return '¡Hola, mundo desde Flask! Prueba 2'
+>>>>>>> feature/test-commit-codepipeline
 
 # Nueva ruta para probar el pipeline
 @app.route('/test')
