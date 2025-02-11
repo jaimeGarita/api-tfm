@@ -8,21 +8,58 @@ from datetime import datetime
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import os
+import boto3
+import json
 
 app = Flask(__name__)
 app.secret_key = 'tu_clave_secreta_aqui'  # Necesario para usar sesiones
 
-# Configuración de la conexión RDS (solo se usará cuando sea necesario)
+# Configuración de la conexión RDS
 DB_CONFIG = {
-    'dbname': os.environ.get('DB_NAME', 'wikipedia'),
-    'user': os.environ.get('DB_USER', 'tu_usuario'),
-    'password': os.environ.get('DB_PASSWORD', 'tu_password'),
-    'host': os.environ.get('DB_HOST', 'tu_endpoint_rds'),
+    'dbname': os.environ.get('DB_NAME', 'demodb'),
+    'user': os.environ.get('DB_USER', 'demouser'),
+    'password': os.environ.get('DB_PASSWORD', 'Demo1234!'),
+    'host': os.environ.get('DB_HOST', 'aurora-cluster-demo.cluster-cnoge4wscm2u.us-west-2.rds.amazonaws.com'),
     'port': os.environ.get('DB_PORT', '5432')
 }
 
+def get_db_credentials():
+    """Obtiene las credenciales de la base de datos según el entorno"""
+    if os.getenv('FLASK_ENV') == 'development':
+        print("Usando configuración local de base de datos desde variables de entorno")
+        return {
+            'dbname': os.getenv('DB_NAME', DB_CONFIG['dbname']),
+            'user': os.getenv('DB_USER', DB_CONFIG['user']),
+            'password': os.getenv('DB_PASSWORD', DB_CONFIG['password']),
+            'host': os.getenv('DB_HOST', DB_CONFIG['host']),
+            'port': os.getenv('DB_PORT', DB_CONFIG['port'])
+        }
+    
+    try:
+        # Configuración para AWS Secrets Manager en producción
+        session = boto3.session.Session()
+        client = session.client(
+            service_name='secretsmanager',
+            region_name=os.getenv('AWS_REGION', 'us-west-2')
+        )
+        
+        secret_name = os.getenv('AWS_SECRET_NAME', 'rds-credentials-db-1')
+        secret_response = client.get_secret_value(SecretId=secret_name)
+        db_credentials = json.loads(secret_response['SecretString'])
+        
+        return {
+            'dbname': db_credentials.get('dbname', DB_CONFIG['dbname']),
+            'user': db_credentials.get('username', DB_CONFIG['user']),
+            'password': db_credentials.get('password', DB_CONFIG['password']),
+            'host': db_credentials.get('host', DB_CONFIG['host']),
+            'port': str(db_credentials.get('port', DB_CONFIG['port']))
+        }
+    except Exception as e:
+        print(f"Error obteniendo credenciales de Secrets Manager: {str(e)}")
+        return DB_CONFIG
+
 def get_db_connection():
-    return psycopg2.connect(**DB_CONFIG)
+    return psycopg2.connect(**get_db_credentials())
 
 def init_db():
     conn = get_db_connection()
@@ -220,4 +257,18 @@ def reset():
     return render_template('index.html', show_form=True)
 
 if __name__ == '__main__':
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    try:
+        # Inicializar la base de datos
+        init_db()
+        print("Base de datos inicializada correctamente")
+        
+        # Iniciar la aplicación
+        if os.getenv('FLASK_ENV') == 'development':
+            print("Iniciando en modo desarrollo")
+            app.run(debug=True, host="0.0.0.0", port=5000)
+        else:
+            print("Iniciando en modo producción")
+            serve(app, host="0.0.0.0", port=5000)
+            
+    except Exception as e:
+        print(f"Error al iniciar la aplicación: {str(e)}")
