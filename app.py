@@ -10,6 +10,11 @@ from psycopg2.extras import RealDictCursor
 import os
 import boto3
 import json
+import logging
+
+# Configurar logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = 'tu_clave_secreta_aqui'  # Necesario para usar sesiones
@@ -59,24 +64,37 @@ def get_db_credentials():
         return DB_CONFIG
 
 def get_db_connection():
-    return psycopg2.connect(**get_db_credentials())
+    logger.info("Intentando conectar a la base de datos...")
+    try:
+        conn = psycopg2.connect(**get_db_credentials())
+        logger.info("Conexión exitosa a la base de datos")
+        return conn
+    except Exception as e:
+        logger.error(f"Error conectando a la base de datos: {str(e)}")
+        raise
 
 def init_db():
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute('''CREATE TABLE IF NOT EXISTS articulos
-                   (id SERIAL PRIMARY KEY,
-                    titulo TEXT,
-                    url TEXT,
-                    resumen TEXT,
-                    longitud INTEGER,
-                    num_referencias INTEGER,
-                    categorias TEXT,
-                    ultima_modificacion TEXT,
-                    fecha_scraping TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-    conn.commit()
-    cur.close()
-    conn.close()
+    logger.info("Inicializando base de datos...")
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute('''CREATE TABLE IF NOT EXISTS articulos
+                    (id SERIAL PRIMARY KEY,
+                     titulo TEXT,
+                     url TEXT,
+                     resumen TEXT,
+                     longitud INTEGER,
+                     num_referencias INTEGER,
+                     categorias TEXT,
+                     ultima_modificacion TEXT,
+                     fecha_scraping TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+        conn.commit()
+        logger.info("Tabla 'articulos' creada/verificada exitosamente")
+        cur.close()
+        conn.close()
+    except Exception as e:
+        logger.error(f"Error en init_db: {str(e)}")
+        raise
 
 def save_to_db(links):
     conn = get_db_connection()
