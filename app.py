@@ -97,19 +97,37 @@ def init_db():
         raise
 
 def save_to_db(links):
+    logger.info(f"Intentando guardar {len(links)} artículos en la base de datos...")
     conn = get_db_connection()
     cur = conn.cursor()
-    for link in links:
-        cur.execute('''INSERT INTO articulos 
-                      (titulo, url, resumen, longitud, num_referencias, 
-                       categorias, ultima_modificacion)
-                      VALUES (%s, %s, %s, %s, %s, %s, %s)''',
-                   (link['titulo'], link['url'], link['resumen'],
-                    link['longitud'], link['num_referencias'],
-                    link['categorias'], link['ultima_modificacion']))
-    conn.commit()
-    cur.close()
-    conn.close()
+    saved_count = 0
+    
+    try:
+        for link in links:
+            cur.execute('''
+                INSERT INTO articulos 
+                (titulo, url, resumen, longitud, num_referencias, 
+                 categorias, ultima_modificacion)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                RETURNING id''',
+                (link['titulo'], 
+                 link['url'], 
+                 link['resumen'],
+                 link['longitud'], 
+                 link['num_referencias'],
+                 link['categorias'], 
+                 link['ultima_modificacion']))
+            saved_count += 1
+            
+        conn.commit()
+        logger.info(f"Guardados exitosamente {saved_count} artículos en la base de datos")
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error guardando en la base de datos: {str(e)}")
+        raise
+    finally:
+        cur.close()
+        conn.close()
 
 def get_historic_links(limit=None):
     conn = get_db_connection()
@@ -171,6 +189,7 @@ def get_article_info(url, headers):
         }
 
 def get_wiki_links(url='https://es.wikipedia.org/wiki/Wikipedia:Portada', num_links=10):
+    logger.info(f"Iniciando web scraping para {num_links} enlaces...")
     # Headers para evitar bloqueos
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
@@ -222,6 +241,12 @@ def get_wiki_links(url='https://es.wikipedia.org/wiki/Wikipedia:Portada', num_li
         except Exception as e:
             print(f"Error procesando {current_url}: {str(e)}")
             continue
+    
+    # Después de obtener los links, guardarlos en la base de datos
+    try:
+        save_to_db(links[:num_links])
+    except Exception as e:
+        logger.error(f"Error al guardar los enlaces en la base de datos: {str(e)}")
     
     # Guardar en CSV solo si es una nueva búsqueda
     df = pd.DataFrame(links)
