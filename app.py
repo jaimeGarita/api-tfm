@@ -8,21 +8,40 @@ from datetime import datetime
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import os
+import boto3
+import json
 
 app = Flask(__name__)
 app.secret_key = 'tu_clave_secreta_aqui'  # Necesario para usar sesiones
 
-# Configuración de la conexión RDS (solo se usará cuando sea necesario)
-DB_CONFIG = {
-    'dbname': os.environ.get('DB_NAME', 'wikipedia'),
-    'user': os.environ.get('DB_USER', 'tu_usuario'),
-    'password': os.environ.get('DB_PASSWORD', 'tu_password'),
-    'host': os.environ.get('DB_HOST', 'tu_endpoint_rds'),
-    'port': os.environ.get('DB_PORT', '5432')
-}
+def get_db_credentials():
+    session = boto3.session.Session()
+    client = session.client(
+        service_name='secretsmanager',
+        region_name='us-west-2'
+    )
+    
+    try:
+        secret_response = client.get_secret_value(
+            SecretId='rds-credentials-db-1'
+        )
+        credentials = json.loads(secret_response['SecretString'])
+        return credentials
+    except Exception as e:
+        print(f"Error obteniendo credenciales: {str(e)}")
+        return None
 
 def get_db_connection():
-    return psycopg2.connect(**DB_CONFIG)
+    credentials = get_db_credentials()
+    if credentials:
+        return psycopg2.connect(
+            dbname=credentials['dbname'],
+            user=credentials['username'],
+            password=credentials['password'],
+            host=credentials['host'],
+            port=credentials['port']
+        )
+    return None
 
 def init_db():
     conn = get_db_connection()
@@ -220,4 +239,5 @@ def reset():
     return render_template('index.html', show_form=True)
 
 if __name__ == '__main__':
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    init_db()  # Inicializar la base de datos al arrancar
+    serve(app, host='0.0.0.0', port=5000)  # Usar waitress en lugar de Flask's development server

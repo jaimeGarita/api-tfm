@@ -6,3 +6,5 @@ requests
 waitress
 psycopg2
 psycopg2-binary
+boto3
+botocore
