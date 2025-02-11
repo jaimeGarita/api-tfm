@@ -15,50 +15,87 @@ app = Flask(__name__)
 app.secret_key = 'tu_clave_secreta_aqui'  # Necesario para usar sesiones
 
 def get_db_credentials():
-    session = boto3.session.Session()
-    client = session.client(
-        service_name='secretsmanager',
-        region_name='us-west-2'
-    )
-    
     try:
+        # Si estamos en desarrollo local, usar variables de entorno
+        if os.getenv('FLASK_ENV') == 'development':
+            print("Usando credenciales de variables de entorno locales")
+            return {
+                'dbname': os.getenv('DB_NAME'),
+                'username': os.getenv('DB_USER'),
+                'password': os.getenv('DB_PASSWORD'),
+                'host': os.getenv('DB_HOST'),
+                'port': int(os.getenv('DB_PORT', '5432'))
+            }
+            
+        # Si no estamos en desarrollo, intentar AWS Secrets Manager
+        session = boto3.session.Session()
+        client = session.client(
+            service_name='secretsmanager',
+            region_name='us-west-2'
+        )
+        
         secret_response = client.get_secret_value(
             SecretId='rds-credentials-db-1'
         )
-        credentials = json.loads(secret_response['SecretString'])
-        return credentials
+        if secret_response:
+            credentials = json.loads(secret_response['SecretString'])
+            print("Credenciales obtenidas de AWS Secrets Manager")
+            return credentials
+        else:
+            print("Advertencia: No se pudieron obtener las credenciales de AWS Secrets Manager")
+            return None 
     except Exception as e:
         print(f"Error obteniendo credenciales: {str(e)}")
         return None
 
 def get_db_connection():
     credentials = get_db_credentials()
-    if credentials:
-        return psycopg2.connect(
+    if not credentials:
+        print("No se pudieron obtener las credenciales de la base de datos")
+        return None
+        
+    try:
+        conn = psycopg2.connect(
             dbname=credentials['dbname'],
             user=credentials['username'],
             password=credentials['password'],
             host=credentials['host'],
             port=credentials['port']
         )
-    return None
+        print(f"Conexión exitosa a la base de datos en {credentials['host']}")
+        return conn
+    except Exception as e:
+        print(f"Error conectando a la base de datos: {str(e)}")
+        return None
 
 def init_db():
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute('''CREATE TABLE IF NOT EXISTS articulos
-                   (id SERIAL PRIMARY KEY,
-                    titulo TEXT,
-                    url TEXT,
-                    resumen TEXT,
-                    longitud INTEGER,
-                    num_referencias INTEGER,
-                    categorias TEXT,
-                    ultima_modificacion TEXT,
-                    fecha_scraping TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-    conn.commit()
-    cur.close()
-    conn.close()
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            print("No se pudo establecer conexión con la base de datos")
+            return False
+            
+        with conn.cursor() as cur:
+            cur.execute('''CREATE TABLE IF NOT EXISTS articulos
+                       (id SERIAL PRIMARY KEY,
+                        titulo TEXT,
+                        url TEXT,
+                        resumen TEXT,
+                        longitud INTEGER,
+                        num_referencias INTEGER,
+                        categorias TEXT,
+                        ultima_modificacion TEXT,
+                        fecha_scraping TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+            conn.commit()
+            print("Tabla 'articulos' creada o verificada exitosamente")
+            return True
+    except Exception as e:
+        print(f"Error en init_db: {str(e)}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+            print("Conexión cerrada")
 
 def save_to_db(links):
     conn = get_db_connection()
@@ -239,5 +276,17 @@ def reset():
     return render_template('index.html', show_form=True)
 
 if __name__ == '__main__':
-    init_db()  # Inicializar la base de datos al arrancar
-    serve(app, host='0.0.0.0', port=5000)  # Usar waitress en lugar de Flask's development server
+    try:
+        if os.getenv('FLASK_ENV') == 'development':
+            print("Iniciando en modo desarrollo")
+            if init_db():
+                print("Base de datos inicializada correctamente")
+            else:
+                print("Advertencia: No se pudo inicializar la base de datos")
+        else:
+            if not init_db():
+                print("Advertencia: No se pudo inicializar la base de datos")
+                
+        serve(app, host='0.0.0.0', port=5000)
+    except Exception as e:
+        print(f"Error al iniciar la aplicación: {str(e)}")
