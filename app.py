@@ -17,9 +17,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = 'tu_clave_secreta_aqui'  # Necesario para usar sesiones
+app.secret_key = 'tu_clave_secreta_aqui'
 
-# Configuración de la conexión RDS
 DB_CONFIG = {
     'dbname': os.environ.get('DB_NAME', 'demodb'),
     'user': os.environ.get('DB_USER', 'demouser'),
@@ -74,26 +73,26 @@ def get_db_connection():
         raise
 
 def init_db():
-    logger.info("Inicializando base de datos...")
+    logger.info("Initializing database...")
     try:
         conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute('''CREATE TABLE IF NOT EXISTS articulos
+        cur.execute('''CREATE TABLE IF NOT EXISTS articles
                     (id SERIAL PRIMARY KEY,
-                     titulo TEXT,
-                     url TEXT,
-                     resumen TEXT,
-                     longitud INTEGER,
-                     num_referencias INTEGER,
-                     categorias TEXT,
-                     ultima_modificacion TEXT,
-                     fecha_scraping TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+                     title TEXT,
+                     url TEXT UNIQUE,
+                     summary TEXT,
+                     length INTEGER,
+                     num_references INTEGER,
+                     categories TEXT,
+                     last_modification TEXT,
+                     date_scraping TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
         conn.commit()
-        logger.info("Tabla 'articulos' creada/verificada exitosamente")
+        logger.info("Table 'articles' created/verified successfully")
         cur.close()
         conn.close()
     except Exception as e:
-        logger.error(f"Error en init_db: {str(e)}")
+        logger.error(f"Error in init_db: {str(e)}")
         raise
 
 def save_to_db(links):
@@ -105,9 +104,9 @@ def save_to_db(links):
     try:
         for link in links:
             cur.execute('''
-                INSERT INTO articulos 
-                (titulo, url, resumen, longitud, num_referencias, 
-                 categorias, ultima_modificacion)
+                INSERT INTO articles 
+                (title, url, summary, length, num_references, 
+                 categories, last_modification)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
                 RETURNING id''',
                 (link['titulo'], 
@@ -133,9 +132,9 @@ def get_historic_links(limit=None):
     conn = get_db_connection()
     cur = conn.cursor(cursor_factory=RealDictCursor)
     if limit:
-        cur.execute('SELECT * FROM articulos ORDER BY fecha_scraping DESC LIMIT %s', (limit,))
+        cur.execute('SELECT * FROM articles ORDER BY date_scraping DESC LIMIT %s', (limit,))
     else:
-        cur.execute('SELECT * FROM articulos ORDER BY fecha_scraping DESC')
+        cur.execute('SELECT * FROM articles ORDER BY date_scraping DESC')
     links = cur.fetchall()
     cur.close()
     conn.close()
@@ -298,6 +297,68 @@ def reset():
     session.pop('links', None)
     session.pop('last_search', None)
     return render_template('index.html', show_form=True)
+
+def insert_article(title, url, summary, length=0, num_references=0, categories='', last_modification=''):
+    """Insert a single article if the URL doesn't exist in the database"""
+    logger.info(f"Attempting to insert article: {title}")
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        # First check if URL exists
+        cur.execute('SELECT id FROM articles WHERE url = %s', (url,))
+        if cur.fetchone():
+            logger.info(f"Article with URL {url} already exists. Skipping insertion.")
+            return False
+
+        # If URL doesn't exist, proceed with insertion
+        cur.execute('''
+            INSERT INTO articles 
+            (title, url, summary, length, num_references, categories, last_modification)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            RETURNING id''',
+            (title, url, summary, length, num_references, categories, last_modification))
+        
+        article_id = cur.fetchone()[0]
+        conn.commit()
+        logger.info(f"Article successfully inserted with ID: {article_id}")
+        return True
+
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error inserting article: {str(e)}")
+        raise
+    finally:
+        cur.close()
+        conn.close()
+
+def get_articles(limit=None, order_by='date_scraping', order='DESC'):
+    """Get articles with flexible filtering options"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        query = 'SELECT * FROM articles'
+        params = []
+
+        # Add ordering
+        query += f' ORDER BY {order_by} {order}'
+
+        # Add limit if specified
+        if limit:
+            query += ' LIMIT %s'
+            params.append(limit)
+
+        cur.execute(query, params)
+        articles = cur.fetchall()
+        return articles
+
+    except Exception as e:
+        logger.error(f"Error fetching articles: {str(e)}")
+        raise
+    finally:
+        cur.close()
+        conn.close()
 
 if __name__ == '__main__':
     try:
