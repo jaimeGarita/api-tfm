@@ -23,7 +23,7 @@ DB_CONFIG = {
     'dbname': os.environ.get('DB_NAME', 'demodb'),
     'user': os.environ.get('DB_USER', 'demouser'),
     'password': os.environ.get('DB_PASSWORD', 'Demo1234!'),
-    'host': os.environ.get('DB_HOST', 'aurora-cluster-demo.cluster-cnoge4wscm2u.us-west-2.rds.amazonaws.com'),
+    'host': os.environ.get('DB_HOST', 'aurora-cluster-demo.cluster-cr0msy0qu1qv.us-west-2.rds.amazonaws.com'),
     'port': os.environ.get('DB_PORT', '5432')
 }
 
