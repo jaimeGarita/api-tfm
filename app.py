@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, session
+from flask import Flask, render_template, request, session, jsonify
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
@@ -356,6 +356,58 @@ def get_articles(limit=None, order_by='date_scraping', order='DESC'):
     except Exception as e:
         logger.error(f"Error fetching articles: {str(e)}")
         raise
+    finally:
+        cur.close()
+        conn.close()
+
+@app.route('/update_article', methods=['POST'])
+def update_article():
+    try:
+        data = request.get_json()
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute('''
+            UPDATE articles 
+            SET title = %s, summary = %s, categories = %s
+            WHERE id = %s
+            RETURNING id''',
+            (data['title'], data['summary'], data['categories'], data['id']))
+        
+        updated_id = cur.fetchone()
+        conn.commit()
+        
+        if updated_id:
+            return jsonify({'success': True, 'message': 'Artículo actualizado correctamente'})
+        else:
+            return jsonify({'success': False, 'message': 'No se encontró el artículo'}), 404
+            
+    except Exception as e:
+        logger.error(f"Error actualizando artículo: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+    finally:
+        cur.close()
+        conn.close()
+
+@app.route('/delete_article', methods=['POST'])
+def delete_article():
+    try:
+        data = request.get_json()
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        cur.execute('DELETE FROM articles WHERE id = %s RETURNING id', (data['id'],))
+        deleted_id = cur.fetchone()
+        conn.commit()
+        
+        if deleted_id:
+            return jsonify({'success': True, 'message': 'Artículo eliminado correctamente'})
+        else:
+            return jsonify({'success': False, 'message': 'No se encontró el artículo'}), 404
+            
+    except Exception as e:
+        logger.error(f"Error eliminando artículo: {str(e)}")
+        return jsonify({'success': False, 'message': str(e)}), 500
     finally:
         cur.close()
         conn.close()

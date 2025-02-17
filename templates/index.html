@@ -659,6 +659,63 @@
         .historic-card:hover .historic-stat {
             animation: pulse 1s infinite;
         }
+
+        .action-buttons {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            display: flex;
+            gap: 0.5rem;
+            z-index: 2;
+        }
+
+        .edit-btn, .delete-btn {
+            background: white;
+            border: none;
+            border-radius: 50%;
+            width: 2rem;
+            height: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: var(--card-shadow);
+        }
+
+        .edit-btn:hover {
+            background: var(--primary-gradient);
+            color: white;
+        }
+
+        .delete-btn:hover {
+            background: var(--danger-gradient);
+            color: white;
+        }
+
+        .edit-form {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .edit-form .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .edit-form textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
     </style>
 </head>
 <body>
@@ -735,6 +792,14 @@
         <div class="link-grid">
             {% for link in links %}
             <div class="link-item">
+                <div class="action-buttons">
+                    <button class="edit-btn" onclick="openEditModal(this)" data-id="{{ link.id }}">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="delete-btn" onclick="openDeleteModal(this)" data-id="{{ link.id }}">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
                 <h3><a href="{{ link.url }}" target="_blank">{{ link.titulo }}</a></h3>
                 <div class="resumen">{{ link.resumen[:150] }}...</div>
                 <div class="stats">
@@ -839,6 +904,52 @@
         {% endif %}
     </div>
 
+    <!-- Modal de Edición -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeEditModal()">&times;</span>
+            <div class="modal-header">
+                <h2>Editar Artículo</h2>
+            </div>
+            <form id="editForm" class="edit-form">
+                <input type="hidden" id="editArticleId" name="id">
+                <div class="input-group">
+                    <label for="editTitle">Título</label>
+                    <input type="text" id="editTitle" name="title" required>
+                </div>
+                <div class="input-group">
+                    <label for="editSummary">Resumen</label>
+                    <textarea id="editSummary" name="summary" required></textarea>
+                </div>
+                <div class="input-group">
+                    <label for="editCategories">Categorías (separadas por |)</label>
+                    <input type="text" id="editCategories" name="categories">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="action-button secondary" onclick="closeEditModal()">Cancelar</button>
+                    <button type="submit" class="action-button primary">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal de Eliminación -->
+    <div id="deleteModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeDeleteModal()">&times;</span>
+            <div class="modal-header">
+                <h2>Confirmar Eliminación</h2>
+            </div>
+            <div class="modal-body">
+                <p>¿Estás seguro de que deseas eliminar este artículo?</p>
+                <div class="modal-actions">
+                    <button class="action-button secondary" onclick="closeDeleteModal()">Cancelar</button>
+                    <button class="action-button danger" onclick="deleteArticle()">Eliminar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Funcionalidad del modal
         const modal = document.getElementById('articleModal');
@@ -895,6 +1006,87 @@
                 openModal(data);
             };
         });
+
+        let currentDeleteId = null;
+        
+        function openEditModal(btn) {
+            const id = btn.dataset.id;
+            const card = btn.closest('.link-item');
+            
+            document.getElementById('editArticleId').value = id;
+            document.getElementById('editTitle').value = card.querySelector('h3 a').textContent;
+            document.getElementById('editSummary').value = card.querySelector('.resumen').textContent;
+            document.getElementById('editCategories').value = card.querySelector('.hidden-categories').textContent;
+            
+            document.getElementById('editModal').style.display = 'block';
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModal').style.display = 'none';
+        }
+
+        function openDeleteModal(btn) {
+            currentDeleteId = btn.dataset.id;
+            document.getElementById('deleteModal').style.display = 'block';
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('deleteModal').style.display = 'none';
+            currentDeleteId = null;
+        }
+
+        document.getElementById('editForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = {
+                id: document.getElementById('editArticleId').value,
+                title: document.getElementById('editTitle').value,
+                summary: document.getElementById('editSummary').value,
+                categories: document.getElementById('editCategories').value
+            };
+
+            try {
+                const response = await fetch('/update_article', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    alert('Error al actualizar el artículo');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error al actualizar el artículo');
+            }
+        });
+
+        async function deleteArticle() {
+            if (!currentDeleteId) return;
+
+            try {
+                const response = await fetch('/delete_article', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ id: currentDeleteId })
+                });
+
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    alert('Error al eliminar el artículo');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error al eliminar el artículo');
+            }
+        }
     </script>
 </body>
 </html> 
