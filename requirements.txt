@@ -9,3 +9,4 @@ psycopg2-binary
 boto3
 beautifulsoup4
 python-dateutil
+pytest==7.4.3
